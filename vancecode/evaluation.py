@@ -1,6 +1,7 @@
 """Repeatable harness evaluation with fresh repos and independent final grading."""
 import argparse
 from datetime import datetime, timezone
+from difflib import unified_diff
 import json
 import os
 from pathlib import Path
@@ -78,6 +79,7 @@ def evaluate(provider_factory, *, mode: str, cases=BENCHMARKS, repeats: int = 1,
                    "baseline_failed": False, "final_tests_passed": False,
                    "visible_tests_passed": None, "holdout_configured": bool(case.holdout_tests),
                    "holdout_tests_passed": None,
+                   "candidate_patch": None,
                    "changed_files": [], "input_tokens": None, "output_tokens": None,
                    "cost_usd": None}
 
@@ -112,6 +114,11 @@ def evaluate(provider_factory, *, mode: str, cases=BENCHMARKS, repeats: int = 1,
                         # run is made from pristine fixture tests in a fresh repo.
                         integrity = set(row["changed_files"]).issubset({case.filename})
                         candidate = after.get(case.filename)
+                        if candidate is not None and candidate[0] == "file":
+                            row["candidate_patch"] = "".join(unified_diff(
+                                case.source.splitlines(keepends=True),
+                                candidate[1].decode("utf-8", errors="replace").splitlines(keepends=True),
+                                fromfile="a/" + case.filename, tofile="b/" + case.filename))
                         if not integrity or candidate is None or candidate[0] != "file":
                             row["reason"] = "unexpected_file_changes"
                         else:

@@ -1,5 +1,7 @@
 # VanceCode — Mini Coding Agent Harness
 
+**狀態：MVP 0.1.0，真實模型驗收待完成。** 這是學習與展示 coding agent harness 的小型實作。離線測試證明工具、迴圈與評測機制能運作；尚未提供真實模型自主修復的成功率。驗收紀錄與收尾條件見 [MVP_STATUS.md](MVP_STATUS.md)。
+
 從零實作的 Python CLI coding agent。已完成 Milestone 1、Milestone 2 的 Context Manager 第一版，以及 Milestone 3 的 Evaluation Harness 第一版；無第三方 runtime dependencies，Python 3.11+（目前在 Python 3.14 驗證）。
 
 ```mermaid
@@ -160,6 +162,8 @@ python3 -m vancecode.evaluation --live --repeats 1 --output reports/live.json
 評測只執行內建可信任 fixtures，自動允許其修改與測試，不提供任意外部 repo 輸入。每個 case 都建立新的 provider instance，避免跨案例對話污染。安裝專案後也可用 `vancecode-eval` 指令。
 
 JSON 報告包含 mode、model、UTC 時間、執行設定、成功率、每案例原因、步數、耗時、provider 呼叫嘗試數、工具呼叫與錯誤數、Agent 測試次數、context 壓縮回合數，以及變動檔案。baseline 與獨立驗收的測試不計入 Agent 工具次數；耗時包含這些驗證。錯誤案例的完整步數無法取得時使用 `null`，平均步數只計入可取得值的執行，並附 `runs_with_step_count`。不記錄 API key、provider 回應本文或完整對話。
+
+每個案例另附 `candidate_patch`（unified diff），供人工檢查模型最後的程式修改。它只包含內建案例的 implementation 差異；沒有可讀候選檔案時為 `null`。報告在暫存 repo 清除後仍保留差異，且不把驗收結果或差異再回送給 Agent。
 
 報告現在為 `schema_version: 2`、`benchmark_version: "2"`，成功率需與相同 benchmark 版本比較。`visible_tests_passed` 與 `holdout_tests_passed` 分開呈現，`final_tests_passed` 代表所需驗收全部通過。尚未執行的驗收為 `null`，不當成通過；沒有設定 holdout 的自訂案例仍可完成可見測試驗收，但 `holdout_configured` 為 false。可見測試通過而 holdout 失敗時原因為 `holdout_tests_failed`。summary 另列出可見測試通過次數與 holdout 的通過、失敗、跳過次數。
 

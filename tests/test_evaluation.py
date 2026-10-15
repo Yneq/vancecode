@@ -32,6 +32,8 @@ class EvaluationTests(unittest.TestCase):
             self.assertEqual(row["tool_calls"], 6)
             self.assertEqual(row["agent_test_runs"], 2)
             self.assertEqual(len(row["changed_files"]), 1)
+            self.assertTrue(row["candidate_patch"].startswith("--- a/"))
+            self.assertIn("+++ b/", row["candidate_patch"])
             self.assertIsNone(row["cost_usd"])
 
     def test_holdouts_are_not_materialized_in_agent_repo(self):
@@ -60,6 +62,7 @@ class EvaluationTests(unittest.TestCase):
         self.assertFalse(row["final_tests_passed"])
         self.assertFalse(row["success"])
         self.assertEqual(row["reason"], "holdout_tests_failed")
+        self.assertIn("wrong", row["candidate_patch"])
         self.assertEqual(report["summary"]["visible_passed"], 1)
         self.assertEqual(report["summary"]["holdout_failed"], 1)
         self.assertEqual(report["schema_version"], 2)
