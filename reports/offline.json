@@ -1,11 +1,13 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
+  "benchmark_version": "2",
   "mode": "offline-scripted",
   "model": null,
-  "created_at": "2026-10-15T17:16:09.542727+00:00",
+  "created_at": "2026-10-15T17:24:47.966939+00:00",
   "limitations": [
     "Scripted runs measure harness mechanics, not model capability.",
-    "Visible fixture tests are limited regression checks, not proof of correctness.",
+    "Visible and held-out fixture tests are limited regression checks, not proof of correctness.",
+    "Held-out tests are withheld from tool-visible repos, not secured against hostile local code.",
     "Token usage and cost are unavailable and reported as null.",
     "Repository tests execute locally without an OS sandbox."
   ],
@@ -20,9 +22,13 @@
     "passed": 6,
     "failed": 0,
     "success_rate": 1.0,
+    "visible_passed": 6,
+    "holdout_passed": 6,
+    "holdout_failed": 0,
+    "holdout_skipped": 0,
     "mean_agent_steps": 7.0,
     "runs_with_step_count": 6,
-    "elapsed_seconds": 5.3816
+    "elapsed_seconds": 6.5235
   },
   "runs": [
     {
@@ -39,13 +45,16 @@
       "max_request_chars": 7692,
       "baseline_failed": true,
       "final_tests_passed": true,
+      "visible_tests_passed": true,
+      "holdout_configured": true,
+      "holdout_tests_passed": true,
       "changed_files": [
         "pricing.py"
       ],
       "input_tokens": null,
       "output_tokens": null,
       "cost_usd": null,
-      "elapsed_seconds": 0.9536
+      "elapsed_seconds": 1.0964
     },
     {
       "case": "shipping_discount",
@@ -61,13 +70,16 @@
       "max_request_chars": 7692,
       "baseline_failed": true,
       "final_tests_passed": true,
+      "visible_tests_passed": true,
+      "holdout_configured": true,
+      "holdout_tests_passed": true,
       "changed_files": [
         "pricing.py"
       ],
       "input_tokens": null,
       "output_tokens": null,
       "cost_usd": null,
-      "elapsed_seconds": 0.9616
+      "elapsed_seconds": 1.129
     },
     {
       "case": "normalize_slug",
@@ -83,13 +95,16 @@
       "max_request_chars": 8412,
       "baseline_failed": true,
       "final_tests_passed": true,
+      "visible_tests_passed": true,
+      "holdout_configured": true,
+      "holdout_tests_passed": true,
       "changed_files": [
         "slug.py"
       ],
       "input_tokens": null,
       "output_tokens": null,
       "cost_usd": null,
-      "elapsed_seconds": 0.7931
+      "elapsed_seconds": 1.0914
     },
     {
       "case": "normalize_slug",
@@ -105,13 +120,16 @@
       "max_request_chars": 8412,
       "baseline_failed": true,
       "final_tests_passed": true,
+      "visible_tests_passed": true,
+      "holdout_configured": true,
+      "holdout_tests_passed": true,
       "changed_files": [
         "slug.py"
       ],
       "input_tokens": null,
       "output_tokens": null,
       "cost_usd": null,
-      "elapsed_seconds": 0.8839
+      "elapsed_seconds": 1.0849
     },
     {
       "case": "mean_precision",
@@ -127,13 +145,16 @@
       "max_request_chars": 7763,
       "baseline_failed": true,
       "final_tests_passed": true,
+      "visible_tests_passed": true,
+      "holdout_configured": true,
+      "holdout_tests_passed": true,
       "changed_files": [
         "stats.py"
       ],
       "input_tokens": null,
       "output_tokens": null,
       "cost_usd": null,
-      "elapsed_seconds": 0.8483
+      "elapsed_seconds": 1.0422
     },
     {
       "case": "mean_precision",
@@ -149,13 +170,16 @@
       "max_request_chars": 7763,
       "baseline_failed": true,
       "final_tests_passed": true,
+      "visible_tests_passed": true,
+      "holdout_configured": true,
+      "holdout_tests_passed": true,
       "changed_files": [
         "stats.py"
       ],
       "input_tokens": null,
       "output_tokens": null,
       "cost_usd": null,
-      "elapsed_seconds": 0.9411
+      "elapsed_seconds": 1.0796
     }
   ]
 }

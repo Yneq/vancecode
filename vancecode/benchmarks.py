@@ -11,6 +11,7 @@ class Benchmark:
     tests: str
     old: str
     new: str
+    holdout_tests: str = ""
 
 
 BENCHMARKS = (
@@ -27,7 +28,16 @@ BENCHMARKS = (
         " def test_rounding(self): self.assertEqual(total([(999, 1)], 15, 125), 974)\n"
         " def test_free_items(self): self.assertEqual(total([(999, 1)], 100, 125), 125)\n",
         "return (subtotal + shipping) * (100 - discount) // 100",
-        "return subtotal * (100 - discount) // 100 + shipping"),
+        "return subtotal * (100 - discount) // 100 + shipping",
+        "import unittest\nfrom pricing import total\n"
+        "class HoldoutPricing(unittest.TestCase):\n"
+        " def test_combinations(self):\n"
+        "  for items in ([], [(1, 1)], [(123, 3), (57, 2)], [(9999, 0)]):\n"
+        "   for discount in (0, 1, 33, 99, 100):\n"
+        "    for shipping in (0, 1, 499):\n"
+        "     with self.subTest(items=items, discount=discount, shipping=shipping):\n"
+        "      expected = sum(p*q for p,q in items) * (100-discount) // 100 + shipping\n"
+        "      self.assertEqual(total(items, discount, shipping), expected)\n"),
     Benchmark(
         "normalize_slug", "Fix slugify: trim, lowercase, collapse whitespace into single hyphens. Preserve other characters.",
         "slug.py", "def slugify(text):\n    return text.lower().replace(' ', '-')\n",
@@ -38,7 +48,14 @@ BENCHMARKS = (
         " def test_tabs(self): self.assertEqual(slugify('A\\tB\\nC'), 'a-b-c')\n"
         " def test_empty(self): self.assertEqual(slugify('   '), '')\n"
         " def test_unicode(self): self.assertEqual(slugify(' 台灣 AI '), '台灣-ai')\n",
-        "return text.lower().replace(' ', '-')", "return '-'.join(text.lower().split())"),
+        "return text.lower().replace(' ', '-')", "return '-'.join(text.lower().split())",
+        "import unittest\nfrom slug import slugify\n"
+        "class HoldoutSlug(unittest.TestCase):\n"
+        " def test_cases(self):\n"
+        "  cases = [('', ''), ('A-B_C!', 'a-b_c!'), ('\\t X \\n Y \\t', 'x-y'),\n"
+        "           ('A\\u00a0B', 'a-b'), ('ÉCOLE 台灣', 'école-台灣'), ('---', '---')]\n"
+        "  for text, expected in cases:\n"
+        "   with self.subTest(text=text): self.assertEqual(slugify(text), expected)\n"),
     Benchmark(
         "mean_precision", "Fix mean: return the arithmetic mean without integer truncation; empty input raises ValueError.",
         "stats.py", "def mean(values):\n    return sum(values) // len(values)\n",
@@ -51,5 +68,13 @@ BENCHMARKS = (
         " def test_empty(self):\n"
         "  with self.assertRaises(ValueError): mean([])\n",
         "    return sum(values) // len(values)",
-        "    if not values:\n        raise ValueError('empty input')\n    return sum(values) / len(values)"),
+        "    if not values:\n        raise ValueError('empty input')\n    return sum(values) / len(values)",
+        "import unittest\nfrom stats import mean\n"
+        "class HoldoutMean(unittest.TestCase):\n"
+        " def test_cases(self):\n"
+        "  for values in ([0], [0, 0], [1, 2, 4], [-7, 0, 3], [0.25, 1.75, 3.5], (2, 3)):\n"
+        "   with self.subTest(values=values):\n"
+        "    self.assertAlmostEqual(mean(values), sum(values)/len(values))\n"
+        " def test_empty(self):\n"
+        "  with self.assertRaises(ValueError): mean([])\n"),
 )

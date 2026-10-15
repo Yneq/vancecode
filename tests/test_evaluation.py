@@ -8,7 +8,7 @@ import unittest
 from unittest.mock import patch
 
 from vancecode.benchmarks import BENCHMARKS, Benchmark
-from vancecode.evaluation import evaluate, main, ScriptedBenchmarkProvider, write_report
+from vancecode.evaluation import evaluate, main, materialize, ScriptedBenchmarkProvider, write_report
 from vancecode.provider import ProviderError
 from vancecode.tools import Tools
 
@@ -23,6 +23,9 @@ class EvaluationTests(unittest.TestCase):
         for row in report["runs"]:
             self.assertTrue(row["baseline_failed"])
             self.assertTrue(row["final_tests_passed"])
+            self.assertTrue(row["visible_tests_passed"])
+            self.assertTrue(row["holdout_configured"])
+            self.assertTrue(row["holdout_tests_passed"])
             self.assertEqual(row["reason"], "verified_pass")
             self.assertEqual(row["agent_steps"], 7)
             self.assertEqual(row["provider_calls"], 7)
@@ -30,6 +33,56 @@ class EvaluationTests(unittest.TestCase):
             self.assertEqual(row["agent_test_runs"], 2)
             self.assertEqual(len(row["changed_files"]), 1)
             self.assertIsNone(row["cost_usd"])
+
+    def test_holdouts_are_not_materialized_in_agent_repo(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "repo"
+            case = BENCHMARKS[0]
+            materialize(case, root)
+            self.assertEqual((root / "tests/test_case.py").read_text(), case.tests)
+            self.assertNotIn("HoldoutPricing", (root / "tests/test_case.py").read_text())
+            self.assertEqual(sorted(p.name for p in (root / "tests").iterdir()), ["test_case.py"])
+
+    def test_overfit_patch_passes_visible_tests_but_fails_holdout(self):
+        class Overfit(ScriptedBenchmarkProvider):
+            def complete(self, messages, tools):
+                message = super().complete(messages, tools)
+                for call in message.get("tool_calls", []):
+                    if call["function"]["name"] == "apply_patch":
+                        args = json.loads(call["function"]["arguments"])
+                        args["new"] = "return {'Hello World': 'hello-world', '  Hello  World  ': 'hello-world', 'A\\tB\\nC': 'a-b-c', '   ': '', ' 台灣 AI ': '台灣-ai'}.get(text, 'wrong')"
+                        call["function"]["arguments"] = json.dumps(args)
+                return message
+        report = evaluate(Overfit, mode="offline-scripted", cases=(BENCHMARKS[1],))
+        row = report["runs"][0]
+        self.assertTrue(row["visible_tests_passed"])
+        self.assertFalse(row["holdout_tests_passed"])
+        self.assertFalse(row["final_tests_passed"])
+        self.assertFalse(row["success"])
+        self.assertEqual(row["reason"], "holdout_tests_failed")
+        self.assertEqual(report["summary"]["visible_passed"], 1)
+        self.assertEqual(report["summary"]["holdout_failed"], 1)
+        self.assertEqual(report["schema_version"], 2)
+
+    def test_holdout_results_are_not_sent_back_to_agent(self):
+        seen = []
+        class Capture(ScriptedBenchmarkProvider):
+            def complete(self, messages, tools):
+                seen.append(json.dumps(messages))
+                return super().complete(messages, tools)
+        report = evaluate(Capture, mode="offline-scripted", cases=BENCHMARKS[:1])
+        self.assertTrue(report["runs"][0]["holdout_tests_passed"])
+        self.assertEqual(len(seen), 7)
+        self.assertFalse(any("HoldoutPricing" in text for text in seen))
+
+    def test_cases_without_holdouts_do_not_claim_holdout_pass(self):
+        from dataclasses import replace
+        case = replace(BENCHMARKS[0], holdout_tests="")
+        report = evaluate(ScriptedBenchmarkProvider, mode="offline-scripted", cases=(case,))
+        row = report["runs"][0]
+        self.assertTrue(row["success"])
+        self.assertFalse(row["holdout_configured"])
+        self.assertIsNone(row["holdout_tests_passed"])
 
     def test_step_limit_is_a_reported_failure(self):
         report = evaluate(ScriptedBenchmarkProvider, mode="offline-scripted",

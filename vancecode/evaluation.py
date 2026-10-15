@@ -37,11 +37,11 @@ class ScriptedBenchmarkProvider:
             "function": {"name": name, "arguments": json.dumps(args)}}]}
 
 
-def materialize(case: Benchmark, root: Path):
+def materialize(case: Benchmark, root: Path, *, holdout: bool = False):
     root.mkdir()
     (root / "tests").mkdir()
     (root / case.filename).write_text(case.source, encoding="utf-8")
-    (root / "tests/test_case.py").write_text(case.tests, encoding="utf-8")
+    (root / "tests/test_case.py").write_text(case.holdout_tests if holdout else case.tests, encoding="utf-8")
     (root / "README.md").write_text(case.task, encoding="utf-8")
 
 
@@ -76,6 +76,8 @@ def evaluate(provider_factory, *, mode: str, cases=BENCHMARKS, repeats: int = 1,
                    "tool_calls": 0, "tool_errors": 0, "agent_test_runs": 0,
                    "context_compactions": 0, "max_request_chars": 0,
                    "baseline_failed": False, "final_tests_passed": False,
+                   "visible_tests_passed": None, "holdout_configured": bool(case.holdout_tests),
+                   "holdout_tests_passed": None,
                    "changed_files": [], "input_tokens": None, "output_tokens": None,
                    "cost_usd": None}
 
@@ -117,10 +119,20 @@ def evaluate(provider_factory, *, mode: str, cases=BENCHMARKS, repeats: int = 1,
                             materialize(case, grade_root)
                             (grade_root / case.filename).write_bytes(candidate[1])
                             grade = Tools(Safety(grade_root, lambda _: True), test_timeout).execute("run_tests", {})
-                            row["final_tests_passed"] = grade.get("ok", False) and grade.get("passed", False)
+                            row["visible_tests_passed"] = grade.get("ok", False) and grade.get("passed", False)
+                            if row["visible_tests_passed"] and case.holdout_tests:
+                                holdout_root = Path(directory) / "holdout"
+                                materialize(case, holdout_root, holdout=True)
+                                (holdout_root / case.filename).write_bytes(candidate[1])
+                                holdout = Tools(Safety(holdout_root, lambda _: True), test_timeout).execute("run_tests", {})
+                                row["holdout_tests_passed"] = holdout.get("ok", False) and holdout.get("passed", False)
+                            row["final_tests_passed"] = row["visible_tests_passed"] and (
+                                not case.holdout_tests or row["holdout_tests_passed"] is True)
                             row["success"] = result.success and row["final_tests_passed"]
                             row["reason"] = ("verified_pass" if row["success"] else
-                                             "final_tests_failed" if result.success else result.reason)
+                                             result.reason if not result.success else
+                                             "final_tests_failed" if not row["visible_tests_passed"] else
+                                             "holdout_tests_failed")
             except Exception as exc:
                 # Do not persist provider bodies, credentials or arbitrary repo text.
                 row["reason"] = "execution_error"
@@ -130,16 +142,21 @@ def evaluate(provider_factory, *, mode: str, cases=BENCHMARKS, repeats: int = 1,
             rows.append(row)
     passed = sum(row["success"] for row in rows)
     completed_steps = [row["agent_steps"] for row in rows if row["agent_steps"] is not None]
-    return {"schema_version": 1, "mode": mode, "model": model if mode == "live" else None,
+    return {"schema_version": 2, "benchmark_version": "2", "mode": mode, "model": model if mode == "live" else None,
             "created_at": datetime.now(timezone.utc).isoformat(),
             "limitations": ["Scripted runs measure harness mechanics, not model capability.",
-                             "Visible fixture tests are limited regression checks, not proof of correctness.",
+                             "Visible and held-out fixture tests are limited regression checks, not proof of correctness.",
+                             "Held-out tests are withheld from tool-visible repos, not secured against hostile local code.",
                              "Token usage and cost are unavailable and reported as null.",
                              "Repository tests execute locally without an OS sandbox."],
             "config": {"repeats": repeats, "max_steps": max_steps, "context_chars": context_chars,
                        "test_timeout": test_timeout},
             "summary": {"runs": len(rows), "passed": passed, "failed": len(rows) - passed,
                         "success_rate": passed / len(rows),
+                        "visible_passed": sum(r["visible_tests_passed"] is True for r in rows),
+                        "holdout_passed": sum(r["holdout_tests_passed"] is True for r in rows),
+                        "holdout_failed": sum(r["holdout_tests_passed"] is False for r in rows),
+                        "holdout_skipped": sum(r["holdout_tests_passed"] is None for r in rows),
                         "mean_agent_steps": sum(completed_steps) / len(completed_steps) if completed_steps else None,
                         "runs_with_step_count": len(completed_steps),
                         "elapsed_seconds": round(sum(row["elapsed_seconds"] for row in rows), 4)},

@@ -138,7 +138,11 @@ python3 -m vancecode.evaluation --repeats 2 --output reports/offline.json
 
 離線 provider 使用已知 reference patch，驗證 harness 能完成工具流程；成功率**不代表模型能力**。reference patch 留在 runner 的 Python 模組裡，不寫入待修 repo，也不送給 live provider。
 
-每個案例每次重複均建立全新的暫存 repo，先確認 baseline 失敗，再執行 Agent。完成後比較檔案，只允許指定的 implementation 檔案改變；接著將修復版本放入另一個全新 repo，使用原始測試獨立驗收。成功必須同時符合 Agent 回報完成與獨立測試通過。原始故障案例不會被改掉。內建測試對模型可見，這不是含隱藏測試的通用程式能力 benchmark，也不是防惡意程式竄改的隔離環境。
+每個案例每次重複均建立全新的暫存 repo，先確認 baseline 失敗，再執行 Agent。完成後比較檔案，只允許指定的 implementation 檔案改變；接著將修復版本放入另一個全新 repo，使用原始測試獨立驗收。可見測試通過後，再建立第三個全新 repo 執行 holdout 驗收。成功必須同時符合 Agent 回報完成、可見測試通過與已設定的 holdout 測試通過。原始故障案例不會被改掉。
+
+Holdout 測試不會放入 Agent 操作的 repo、context 或工具結果；只在 Agent 結束後執行，也不把失敗內容回送給模型。三個案例的額外驗收分別檢查商品/折扣/運費組合、Unicode 空白與標點保留，以及浮點數與更多平均值案例。它們是依既有任務規格增加的邊界測試，不增加未告知模型的新要求。
+
+這是評測資料的分離，不是保密或安全隔離：holdout 原始碼仍在專案的 `benchmarks.py`，本機測試程式仍有使用者權限。此小型 benchmark 不能代表通用程式能力，也不能防止惡意程式偵測評測環境。
 
 選擇特定案例或較小 context：
 
@@ -157,16 +161,18 @@ python3 -m vancecode.evaluation --live --repeats 1 --output reports/live.json
 
 JSON 報告包含 mode、model、UTC 時間、執行設定、成功率、每案例原因、步數、耗時、provider 呼叫嘗試數、工具呼叫與錯誤數、Agent 測試次數、context 壓縮回合數，以及變動檔案。baseline 與獨立驗收的測試不計入 Agent 工具次數；耗時包含這些驗證。錯誤案例的完整步數無法取得時使用 `null`，平均步數只計入可取得值的執行，並附 `runs_with_step_count`。不記錄 API key、provider 回應本文或完整對話。
 
+報告現在為 `schema_version: 2`、`benchmark_version: "2"`，成功率需與相同 benchmark 版本比較。`visible_tests_passed` 與 `holdout_tests_passed` 分開呈現，`final_tests_passed` 代表所需驗收全部通過。尚未執行的驗收為 `null`，不當成通過；沒有設定 holdout 的自訂案例仍可完成可見測試驗收，但 `holdout_configured` 為 false。可見測試通過而 holdout 失敗時原因為 `holdout_tests_failed`。summary 另列出可見測試通過次數與 holdout 的通過、失敗、跳過次數。
+
 目前未收集 API usage，也沒有價格表：token 數與 `cost_usd` 一律為 `null`，不能解讀為零成本。模型自主修復成功率需使用 `--live` 實際執行後才能評估。JSON 先寫暫存檔再原子替換；指定已存在的報告路徑會覆寫舊報告。Exit codes：0 = 全部成功、1 = 至少一個案例失敗、2 = CLI 設定或報告寫入錯誤、130 = 中斷。
 
 ## 驗證與下一階段
 
 基本測試涵蓋：故障重現與二次修復、工具參數錯誤、拒絕修改、路徑越界、秘密檔案、測試唯讀、過期 patch、測試 timeout、空測試、環境變數隔離、假完成、迴圈上限，以及 mock HTTP 格式。故障範例不加入專案自身的測試探索；demo 每次複製後修復，保留原始故障。
 
-Context 測試另涵蓋原始任務保留、完整工具群組、未配對結果拒絕、中文 JSON 字元數、節錄標記、完整歷史不被修改、行號讀檔，以及 9,000 字元預算下的修復整合。Evaluation 測試涵蓋多案例重複、baseline 驗證、獨立驗收拒絕假成功、測試檔竄改、provider 錯誤繼續其他案例、報告原子寫入與參數檢查；另有 stale bytecode 回歸測試。目前共 36 個測試。
+Context 測試另涵蓋原始任務保留、完整工具群組、未配對結果拒絕、中文 JSON 字元數、節錄標記、完整歷史不被修改、行號讀檔，以及 9,000 字元預算下的修復整合。Evaluation 測試涵蓋多案例重複、baseline 驗證、獨立驗收拒絕假成功、測試檔竄改、provider 錯誤繼續其他案例、報告原子寫入與參數檢查；另有 stale bytecode 回歸測試。新增測試驗證 holdout 不出現在 Agent repo 與對話、針對可見測試寫死答案的修復會被拒絕，以及沒有 holdout 時不宣稱通過。目前共 40 個測試。
 
 真實 API 呼叫與模型自主選工具的修復能力，必須設定自己的 key/model 後執行上面的命令驗收；離線測試不能替代這項驗證。
 
-後續補上模型專用 token 計量、API usage 與成本計算、檔案選取策略，以及更豐富的評測案例與隱藏測試。此版本不加入 UI、FastAPI、資料庫、Docker 或 K8s。
+後續補上模型專用 token 計量、API usage 與成本計算、檔案選取策略，以及更豐富的評測案例。此版本不加入 UI、FastAPI、資料庫、Docker 或 K8s。
 
 工具呼叫的 wire format 依照 [OpenAI 官方 Function calling 文件](https://developers.openai.com/api/docs/guides/function-calling)；此專案自行實作 loop，未使用 agent framework。
