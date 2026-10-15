@@ -16,15 +16,20 @@
 |---|---|---|
 | 自動測試 | 新增差異紀錄後重新執行，40 個測試全部通過 | `python3 -m unittest discover -s tests -v` |
 | 離線評測 | 更新報告後 6/6 通過，可見與 holdout 均為 6/6 | `reports/offline.json`，mode 為 offline-scripted，包含 candidate_patch |
-| 真實模型三案例 | 待設定 API key 與模型後執行 | 尚無 live 報告，不推定成功 |
+| Gemini 設定 | 已沿用既有股票研究專案的本機 key 與 gemini-3.6-flash；key 僅存於被忽略的 .env | 使用 Google OpenAI-compatible endpoint，未更動舊專案 |
+| 真實模型三案例 | 第一案例預檢因工作階段 DNS 失敗而中止，模型修復能力尚未驗收 | `reports/live-preflight.json` 為連線錯誤紀錄，不是模型能力分數 |
 | 真實模型 patch 人工檢查 | 待 live 報告 | 檢查每案例 candidate_patch，確認符合規格、未硬編碼測試答案 |
-| GitHub 最終同步 | 待最後 commit 與 push 驗證 | 比較本機 HEAD 與遠端 main |
+| GitHub 最終同步 | 依使用者安排，留待明天一併 push | 比較本機 HEAD 與遠端 main |
 
 離線 reference patch 的程式邏輯已檢查：pricing 只對商品小計折扣後加運費；slug 以 whitespace split/join 正規化並保留標點；mean 檢查空輸入後使用除法保留小數。這是 reference patch 的檢查，不等同檢查真實模型產出的 patch。
 
 ## 執行真實模型驗收
 
 在本專案目錄的 `.env` 填入 `OPENAI_API_KEY`、`VANCECODE_MODEL`；若使用其他相容服務，再設定 `VANCECODE_BASE_URL`。不要把金鑰放入 README、報告或 Git。
+
+本機 Gemini 設定已完成，不需重新申請 key。Gemini 使用 `https://generativelanguage.googleapis.com/v1beta/openai`；`OPENAI_API_KEY` 在此只是相容介面的設定名稱，內容是 Gemini key。Gemini 3.6 Flash 的模型定價提供免費層，但實際免費額度與計費層級取決於該 key 所屬的 Google 專案；程式不會替你變更計費設定。[官方定價](https://ai.google.dev/gemini-api/docs/pricing)、[相容介面](https://ai.google.dev/gemini-api/docs/openai)。
+
+第一次預檢只執行 `shipping_discount`。Baseline 有重現故障，但 provider 無法連線；另以 DNS 查詢確認目前工作階段無法解析 `generativelanguage.googleapis.com`。因此保留預檢紀錄，不繼續消耗其他案例，也不將 0/1 當成 Gemini 修復失敗率。需在可連網的本機終端機執行下列完整驗收，再回看 candidate_patch。
 
 ```sh
 python3 -m vancecode.evaluation --live --repeats 1 --max-steps 20 --output reports/live.json
