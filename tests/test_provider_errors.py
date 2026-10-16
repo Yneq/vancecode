@@ -89,6 +89,27 @@ class ProviderDiagnosticTests(unittest.TestCase):
         for message, issue in (("parameters.properties: should be non-empty for OBJECT type", "empty_object_schema"),
                                ('Unknown name "additionalProperties"', "unsupported_schema_field")):
             result = http_diagnostic(json.dumps([{"error": {"message": message}}]).encode())
-            self.assertEqual(result, {"request_issue": issue})
+            self.assertEqual(result["request_issue"], issue)
+            self.assertEqual(result["provider_message"], message)
         self.assertEqual(http_diagnostic(b'{"error":{"status":"secret","details":[{"reason":"secret"}]}}'), {})
         self.assertEqual(http_diagnostic(b'not json'), {})
+
+    def test_error_message_is_redacted_bounded_and_printed(self):
+        from vancecode.provider import http_diagnostic, safe_provider_message
+        secret = "not-a-standard-key-value"
+        text = "Invalid request: " + secret + " https://example.com/?key=private Bearer hidden-token\n" + "x" * 2000
+        diagnostic = http_diagnostic(json.dumps({"error": {"message": text}}).encode(), secret)
+        message = diagnostic["provider_message"]
+        self.assertNotIn(secret, message)
+        self.assertNotIn("hidden-token", message)
+        self.assertNotIn("example.com", message)
+        self.assertLessEqual(len(message), 1200)
+        self.assertNotIn("\n", message)
+        self.assertNotIn("private", safe_provider_message("api_key=private"))
+        report = {"mode": "live", "summary": {"passed": 0, "runs": 1, "failed": 1},
+                  "runs": [{"case": "shipping_discount", "provider_error": {
+                      "kind": "http_error", "http_status": 400, "provider_message": "Unknown field minimum"}}]}
+        with tempfile.TemporaryDirectory() as directory, patch(
+                "vancecode.evaluation.evaluate", return_value=report), redirect_stdout(StringIO()) as output:
+            main(["--output", str(Path(directory) / "report.json")])
+        self.assertIn("Unknown field minimum", output.getvalue())

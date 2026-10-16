@@ -1,5 +1,6 @@
 """The loop depends on a Protocol, not an API client."""
 import json
+import re
 import socket
 import ssl
 from typing import Protocol
@@ -15,8 +16,20 @@ REASONS = {"API_KEY_INVALID", "API_KEY_EXPIRED", "API_KEY_BLOCKED", "API_KEY_SER
 ISSUES = {"unsupported_schema_field", "empty_object_schema", "invalid_api_key", "blocked_api_key"}
 
 
-def http_diagnostic(body: bytes) -> dict:
-    """Extract allowlisted codes only; never return provider message text."""
+def safe_provider_message(message: str, api_key: str = "") -> str:
+    """Keep a bounded error explanation, excluding credentials and URLs."""
+    if api_key:
+        message = message.replace(api_key, "[REDACTED]")
+    message = re.sub(r"https?://\S+", "[URL REDACTED]", message, flags=re.IGNORECASE)
+    message = re.sub(r"(?i)\b(?:bearer\s+\S+|AIza[\w-]+|(?:sk-|gsk_|ghp_)[\w-]+)",
+                     "[REDACTED]", message)
+    message = re.sub(r"(?i)((?:api[_ -]?key|token|authorization)\s*[:=]\s*)[^\s,;]+",
+                     r"\1[REDACTED]", message)
+    return " ".join("".join(c for c in message if c.isprintable() or c.isspace()).split())[:1200]
+
+
+def http_diagnostic(body: bytes, api_key: str = "") -> dict:
+    """Extract allowlisted codes plus the credential-redacted message field."""
     try:
         data = json.loads(body)
         if isinstance(data, list):
@@ -31,7 +44,10 @@ def http_diagnostic(body: bytes) -> dict:
             if isinstance(detail, dict) and detail.get("reason") in REASONS:
                 result["provider_reason"] = detail["reason"]
                 break
-        message = str(error.get("message", "")).lower()
+        raw_message = error.get("message", "")
+        if isinstance(raw_message, str) and raw_message:
+            result["provider_message"] = safe_provider_message(raw_message, api_key)
+        message = str(raw_message).lower()
         if "api key not valid" in message or "api key expired" in message:
             result["request_issue"] = "invalid_api_key"
         elif "key" in message and "leaked" in message:
@@ -47,7 +63,7 @@ def http_diagnostic(body: bytes) -> dict:
 
 class ProviderError(RuntimeError):
     def __init__(self, message: str, *, kind: str = "provider_error", http_status: int | None = None,
-                 provider_status=None, provider_reason=None, request_issue=None):
+                 provider_status=None, provider_reason=None, request_issue=None, provider_message=None):
         super().__init__(message)
         allowed = {"provider_error", "http_error", "dns_error", "tls_certificate_error",
                    "tls_error", "timeout", "connection_error", "invalid_response", "incomplete_response"}
@@ -56,10 +72,12 @@ class ProviderError(RuntimeError):
         self.details = {k: v for k, v, allowed_values in (
             ("provider_status", provider_status, STATUSES), ("provider_reason", provider_reason, REASONS),
             ("request_issue", request_issue, ISSUES)) if isinstance(v, str) and v in allowed_values}
+        if isinstance(provider_message, str) and provider_message:
+            self.details["provider_message"] = safe_provider_message(provider_message)
 
     def diagnostic(self) -> dict:
-        # Only locally generated enums and numeric status codes, never an
-        # exception string, request URL, provider body or credential.
+        # No raw exception string, full provider body or request URL. The HTTP
+        # message field is separately redacted and capped before retention.
         return {"kind": self.kind, "http_status": self.http_status, **self.details}
 
 
@@ -96,7 +114,7 @@ class OpenAICompatibleProvider:
         except HTTPError as exc:
             status = exc.code
             try:
-                details = http_diagnostic(exc.read(16_384))
+                details = http_diagnostic(exc.read(16_384), self.api_key)
             except OSError:
                 details = {}
             finally:
