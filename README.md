@@ -1,6 +1,6 @@
 # VanceCode — Mini Coding Agent Harness
 
-**狀態：MVP 0.1.0，真實模型驗收待完成。** 這是學習與展示 coding agent harness 的小型實作。離線測試證明工具、迴圈與評測機制能運作；尚未提供真實模型自主修復的成功率。驗收紀錄與收尾條件見 [MVP_STATUS.md](MVP_STATUS.md)。
+**狀態：MVP 0.1.0，真實模型三案例驗收進行中。** 這是學習與展示 coding agent harness 的小型實作。Gemini 已完成 shipping_discount 的自主修復，可見與 holdout 測試均通過；其餘兩個案例待驗收，尚不宣稱整組成功率。驗收紀錄與收尾條件見 [MVP_STATUS.md](MVP_STATUS.md)。
 
 從零實作的 Python CLI coding agent。已完成 Milestone 1、Milestone 2 的 Context Manager 第一版，以及 Milestone 3 的 Evaluation Harness 第一版；無第三方 runtime dependencies，Python 3.11+（目前在 Python 3.14 驗證）。
 
