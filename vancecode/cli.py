@@ -8,6 +8,7 @@ from .provider import OpenAICompatibleProvider, ProviderError
 from .safety import Safety
 from .tools import Tools
 from .context import ContextManager
+from .traffic import PacedProvider, RequestSchedule
 
 
 def load_env(path: Path):
@@ -33,6 +34,8 @@ def main(argv=None):
     parser.add_argument("--test-timeout", type=float, default=30)
     parser.add_argument("--context-chars", type=int, default=200_000, help="JSON context budget including tool schemas")
     parser.add_argument("--tool-result-chars", type=int, default=12_000, help="Large tool result preview threshold")
+    parser.add_argument("--request-interval", type=float, default=0)
+    parser.add_argument("--rate-limit-retries", type=int, default=0)
     parser.add_argument("--yes", action="store_true", help="Approve edits and execution in a trusted repo")
     args = parser.parse_args(argv)
 
@@ -59,6 +62,8 @@ def main(argv=None):
         provider = OpenAICompatibleProvider(
             os.getenv("OPENAI_API_KEY", ""), args.model or os.getenv("VANCECODE_MODEL", ""),
             os.getenv("VANCECODE_BASE_URL", "https://api.openai.com/v1"))
+        provider = PacedProvider(provider, RequestSchedule(args.request_interval, args.rate_limit_retries,
+            on_wait=lambda seconds: print(f"Waiting {seconds:.1f}s before next model request...", flush=True)))
         tools = Tools(Safety(args.repo, approve), args.test_timeout)
         context = ContextManager(args.context_chars, args.tool_result_chars)
         result = Agent(provider, tools, args.max_steps, emit, context=context).run(args.task)

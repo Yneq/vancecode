@@ -14,6 +14,7 @@ from .context import ContextManager
 from .provider import OpenAICompatibleProvider, ProviderError
 from .safety import Safety
 from .tools import Tools
+from .traffic import PacedProvider, RequestSchedule
 
 
 class ScriptedBenchmarkProvider:
@@ -62,16 +63,19 @@ def snapshot(root: Path) -> dict:
 
 def evaluate(provider_factory, *, mode: str, cases=BENCHMARKS, repeats: int = 1,
              max_steps: int = 20, context_chars: int = 200_000,
-             test_timeout: float = 30, model: str | None = None) -> dict:
+             test_timeout: float = 30, model: str | None = None,
+             request_interval: float = 0, rate_limit_retries: int = 0, on_wait=None) -> dict:
     if mode not in ("offline-scripted", "live"):
         raise ValueError("Unknown evaluation mode")
     if repeats < 1 or max_steps < 1 or test_timeout <= 0 or not cases:
         raise ValueError("Evaluation requires cases and positive limits")
     ContextManager(context_chars)  # Validate once before executing anything.
+    schedule = RequestSchedule(request_interval, rate_limit_retries, on_wait=on_wait)
     rows = []
     for case in cases:
         for attempt in range(1, repeats + 1):
             started = time.monotonic()
+            transport_before = (schedule.requests, schedule.retry_count, schedule.wait_seconds)
             row = {"case": case.name, "attempt": attempt, "success": False,
                    "reason": "not_started", "agent_steps": 0, "provider_calls": 0,
                    "tool_calls": 0, "tool_errors": 0, "agent_test_runs": 0,
@@ -104,7 +108,7 @@ def evaluate(provider_factory, *, mode: str, cases=BENCHMARKS, repeats: int = 1,
                     if not row["baseline_failed"]:
                         row["reason"] = "invalid_baseline"
                     else:
-                        result = Agent(provider_factory(case), tools, max_steps=max_steps,
+                        result = Agent(PacedProvider(provider_factory(case), schedule), tools, max_steps=max_steps,
                                        emit=emit, context=ContextManager(context_chars)).run(case.task)
                         row["agent_steps"] = result.steps
                         after = snapshot(root)
@@ -148,6 +152,9 @@ def evaluate(provider_factory, *, mode: str, cases=BENCHMARKS, repeats: int = 1,
                     row["provider_error"] = exc.diagnostic()
                 row["agent_steps"] = None
             row["elapsed_seconds"] = round(time.monotonic() - started, 4)
+            row["transport_requests"] = schedule.requests - transport_before[0]
+            row["rate_limit_retries"] = schedule.retry_count - transport_before[1]
+            row["request_wait_seconds"] = round(schedule.wait_seconds - transport_before[2], 4)
             rows.append(row)
     passed = sum(row["success"] for row in rows)
     completed_steps = [row["agent_steps"] for row in rows if row["agent_steps"] is not None]
@@ -159,7 +166,8 @@ def evaluate(provider_factory, *, mode: str, cases=BENCHMARKS, repeats: int = 1,
                              "Token usage and cost are unavailable and reported as null.",
                              "Repository tests execute locally without an OS sandbox."],
             "config": {"repeats": repeats, "max_steps": max_steps, "context_chars": context_chars,
-                       "test_timeout": test_timeout},
+                       "test_timeout": test_timeout, "request_interval": request_interval,
+                       "rate_limit_retries": rate_limit_retries},
             "summary": {"runs": len(rows), "passed": passed, "failed": len(rows) - passed,
                         "success_rate": passed / len(rows),
                         "visible_passed": sum(r["visible_tests_passed"] is True for r in rows),
@@ -196,6 +204,8 @@ def main(argv=None):
     parser.add_argument("--max-steps", type=int, default=20)
     parser.add_argument("--context-chars", type=int, default=200_000)
     parser.add_argument("--test-timeout", type=float, default=30)
+    parser.add_argument("--request-interval", type=float, default=0, help="Minimum seconds between model requests (0..60)")
+    parser.add_argument("--rate-limit-retries", type=int, default=0, help="Extra attempts per model turn after HTTP 429 (0..5)")
     parser.add_argument("--output", type=Path, default=Path("evaluation-report.json"))
     args = parser.parse_args(argv)
     try:
@@ -213,7 +223,9 @@ def main(argv=None):
         cases = tuple(c for c in BENCHMARKS if not args.case or c.name in args.case)
         report = evaluate(factory, mode="live" if args.live else "offline-scripted", cases=cases,
                           repeats=args.repeats, max_steps=args.max_steps,
-                          context_chars=args.context_chars, test_timeout=args.test_timeout, model=model)
+                          context_chars=args.context_chars, test_timeout=args.test_timeout, model=model,
+                          request_interval=args.request_interval, rate_limit_retries=args.rate_limit_retries,
+                          on_wait=lambda seconds: print(f"Waiting {seconds:.1f}s before next model request...", flush=True))
         write_report(report, args.output)
         summary = report["summary"]
         print(f"{report['mode']}: {summary['passed']}/{summary['runs']} verified passes; report: {args.output}")

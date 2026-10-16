@@ -15,6 +15,17 @@ from vancecode.benchmarks import BENCHMARKS
 
 
 class ProviderDiagnosticTests(unittest.TestCase):
+    def test_retry_delay_combines_header_and_google_hints(self):
+        from vancecode.provider import http_diagnostic
+        body = json.dumps({"error": {"message": "Please retry in 45.128s.",
+                        "details": [{"retryDelay": "40s"}]}}).encode()
+        self.assertEqual(http_diagnostic(body)["retry_after_seconds"], 45.128)
+        error = HTTPError("https://private", 429, "hidden", {"Retry-After": "50"}, BytesIO(body))
+        with patch("vancecode.provider.urlopen", side_effect=error):
+            with self.assertRaises(ProviderError) as caught:
+                OpenAICompatibleProvider("key", "model").complete([], [])
+        self.assertEqual(caught.exception.diagnostic()["retry_after_seconds"], 50)
+
     def test_network_errors_are_classified_without_leaking_details(self):
         cases = [(URLError(socket.gaierror(-2, "secret-url")), "dns_error"),
                  (URLError(ssl.SSLCertVerificationError(1, "secret-cert")), "tls_certificate_error"),

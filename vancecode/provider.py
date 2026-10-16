@@ -1,5 +1,6 @@
 """The loop depends on a Protocol, not an API client."""
 import json
+import math
 import re
 import socket
 import ssl
@@ -41,13 +42,19 @@ def http_diagnostic(body: bytes, api_key: str = "") -> dict:
         if error.get("status") in STATUSES:
             result["provider_status"] = error["status"]
         for detail in error.get("details", []) or []:
+            if isinstance(detail, dict) and isinstance(detail.get("retryDelay"), str):
+                match = re.fullmatch(r"(\d+(?:\.\d+)?)s", detail["retryDelay"])
+                if match:
+                    result["retry_after_seconds"] = float(match[1])
             if isinstance(detail, dict) and detail.get("reason") in REASONS:
                 result["provider_reason"] = detail["reason"]
-                break
         raw_message = error.get("message", "")
         if isinstance(raw_message, str) and raw_message:
             result["provider_message"] = safe_provider_message(raw_message, api_key)
         message = str(raw_message).lower()
+        retry = re.search(r"retry in (\d+(?:\.\d+)?)s", message)
+        if retry:
+            result["retry_after_seconds"] = max(result.get("retry_after_seconds", 0), float(retry[1]))
         if "api key not valid" in message or "api key expired" in message:
             result["request_issue"] = "invalid_api_key"
         elif "key" in message and "leaked" in message:
@@ -63,7 +70,8 @@ def http_diagnostic(body: bytes, api_key: str = "") -> dict:
 
 class ProviderError(RuntimeError):
     def __init__(self, message: str, *, kind: str = "provider_error", http_status: int | None = None,
-                 provider_status=None, provider_reason=None, request_issue=None, provider_message=None):
+                 provider_status=None, provider_reason=None, request_issue=None, provider_message=None,
+                 retry_after_seconds=None):
         super().__init__(message)
         allowed = {"provider_error", "http_error", "dns_error", "tls_certificate_error",
                    "tls_error", "timeout", "connection_error", "invalid_response", "incomplete_response"}
@@ -74,6 +82,9 @@ class ProviderError(RuntimeError):
             ("request_issue", request_issue, ISSUES)) if isinstance(v, str) and v in allowed_values}
         if isinstance(provider_message, str) and provider_message:
             self.details["provider_message"] = safe_provider_message(provider_message)
+        if (type(retry_after_seconds) in (int, float) and math.isfinite(retry_after_seconds)
+                and retry_after_seconds >= 0):
+            self.details["retry_after_seconds"] = retry_after_seconds
 
     def diagnostic(self) -> dict:
         # No raw exception string, full provider body or request URL. The HTTP
@@ -115,6 +126,9 @@ class OpenAICompatibleProvider:
             status = exc.code
             try:
                 details = http_diagnostic(exc.read(16_384), self.api_key)
+                retry_header = exc.headers.get("Retry-After", "") if exc.headers else ""
+                if re.fullmatch(r"\d+(?:\.\d+)?", retry_header):
+                    details["retry_after_seconds"] = max(details.get("retry_after_seconds", 0), float(retry_header))
             except OSError:
                 details = {}
             finally:

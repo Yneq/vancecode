@@ -1,0 +1,97 @@
+{
+  "schema_version": 2,
+  "benchmark_version": "2",
+  "mode": "live",
+  "model": "gemini-3.6-flash",
+  "created_at": "2026-10-16T11:08:18.035832+00:00",
+  "limitations": [
+    "Scripted runs measure harness mechanics, not model capability.",
+    "Visible and held-out fixture tests are limited regression checks, not proof of correctness.",
+    "Held-out tests are withheld from tool-visible repos, not secured against hostile local code.",
+    "Token usage and cost are unavailable and reported as null.",
+    "Repository tests execute locally without an OS sandbox."
+  ],
+  "config": {
+    "repeats": 1,
+    "max_steps": 20,
+    "context_chars": 200000,
+    "test_timeout": 30
+  },
+  "summary": {
+    "runs": 2,
+    "passed": 0,
+    "failed": 2,
+    "success_rate": 0.0,
+    "visible_passed": 0,
+    "holdout_passed": 0,
+    "holdout_failed": 0,
+    "holdout_skipped": 2,
+    "mean_agent_steps": null,
+    "runs_with_step_count": 0,
+    "elapsed_seconds": 31.3621
+  },
+  "runs": [
+    {
+      "case": "normalize_slug",
+      "attempt": 1,
+      "success": false,
+      "reason": "execution_error",
+      "agent_steps": null,
+      "provider_calls": 7,
+      "tool_calls": 6,
+      "tool_errors": 0,
+      "agent_test_runs": 2,
+      "context_compactions": 0,
+      "max_request_chars": 14670,
+      "baseline_failed": true,
+      "final_tests_passed": false,
+      "visible_tests_passed": null,
+      "holdout_configured": true,
+      "holdout_tests_passed": null,
+      "candidate_patch": null,
+      "changed_files": [],
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd": null,
+      "error_type": "ProviderError",
+      "provider_error": {
+        "kind": "http_error",
+        "http_status": 429,
+        "provider_status": "RESOURCE_EXHAUSTED",
+        "provider_message": "You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: [URL REDACTED] To monitor your current usage, head to: [URL REDACTED] * Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 5, model: gemini-3.6-flash Please retry in 45.128230448s."
+      },
+      "elapsed_seconds": 27.6044
+    },
+    {
+      "case": "mean_precision",
+      "attempt": 1,
+      "success": false,
+      "reason": "execution_error",
+      "agent_steps": null,
+      "provider_calls": 3,
+      "tool_calls": 2,
+      "tool_errors": 0,
+      "agent_test_runs": 0,
+      "context_compactions": 0,
+      "max_request_chars": 4101,
+      "baseline_failed": true,
+      "final_tests_passed": false,
+      "visible_tests_passed": null,
+      "holdout_configured": true,
+      "holdout_tests_passed": null,
+      "candidate_patch": null,
+      "changed_files": [],
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd": null,
+      "error_type": "ProviderError",
+      "provider_error": {
+        "kind": "http_error",
+        "http_status": 429,
+        "provider_status": "RESOURCE_EXHAUSTED",
+        "provider_message": "You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: [URL REDACTED] To monitor your current usage, head to: [URL REDACTED] * Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 5, model: gemini-3.6-flash Please retry in 41.395544164s."
+      },
+      "elapsed_seconds": 3.7577
+    }
+  ]
+}

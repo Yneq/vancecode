@@ -52,7 +52,7 @@ python3 -m vancecode "讀取規格與測試，修復 pricing 的 bug，直到所
 
 `.env` 從啟動時的工作目錄載入，現有環境變數優先。model 必須支援 function calling；此版本不硬編碼模型名稱。`VANCECODE_BASE_URL` 可設定為支援同一格式的 HTTPS endpoint，金鑰會傳送到該 endpoint。只有一個實際 provider，透過 `Provider.complete(messages, tools)` Protocol 與 loop 解耦。
 
-預設每次修改與執行測試都詢問確認；對已信任的 repository 可使用 `--yes` 讓模型連續執行。`--max-steps 20` 限制模型回合數，每回合最多八個工具呼叫；`--test-timeout 30` 限制單次測試秒數。`--context-chars 200000` 設定序列化 messages 與 tool schemas 的字元預算；`--tool-result-chars 12000` 設定工具結果節錄門檻。API timeout 60 秒；API 錯誤不會自動重送，避免不透明的重複計費。
+預設每次修改與執行測試都詢問確認；對已信任的 repository 可使用 `--yes` 讓模型連續執行。`--max-steps 20` 限制模型回合數，每回合最多八個工具呼叫；`--test-timeout 30` 限制單次測試秒數。`--context-chars 200000` 設定序列化 messages 與 tool schemas 的字元預算；`--tool-result-chars 12000` 設定工具結果節錄門檻。API timeout 60 秒；預設不自動重送，可明確設定 HTTP 429 的等待重試。
 
 Exit codes：0 = tests passed 且模型完成、1 = 超出步數/context 上限、2 = 設定/API 錯誤、130 = 使用者中斷。
 
@@ -169,6 +169,20 @@ JSON 報告包含 mode、model、UTC 時間、執行設定、成功率、每案�
 
 目前未收集 API usage，也沒有價格表：token 數與 `cost_usd` 一律為 `null`，不能解讀為零成本。模型自主修復成功率需使用 `--live` 實際執行後才能評估。JSON 先寫暫存檔再原子替換；指定已存在的報告路徑會覆寫舊報告。Exit codes：0 = 全部成功、1 = 至少一個案例失敗、2 = CLI 設定或報告寫入錯誤、130 = 中斷。
 
+## 免費額度下的請求節流
+
+若多輪 Agent 遇到 Gemini 的 `429 RESOURCE_EXHAUSTED`，可讓每次模型請求至少間隔 15 秒，並允許每輪最多兩次額外重試：
+
+```sh
+python3 -m vancecode.evaluation --live --case normalize_slug --case mean_precision --request-interval 15 --rate-limit-retries 2 --output reports/live-remaining-paced.json
+```
+
+一般 CLI 也支援相同兩個參數。預設兩者均為 0，不增加等待或自動重試。interval 上限 60 秒、重試上限 5 次；只重試 HTTP 429，其他錯誤直接回報。重試採指數退避加少量 jitter，並遵守數字型 Retry-After header、Google RetryInfo 或錯誤訊息的等待秒數。單次要求等待超過 60 秒時回報錯誤，不縮短伺服器要求的冷卻時間。等待可用 Ctrl-C 中斷。
+
+同一評測程序中的案例共用請求排程；不協調其他程序或股票專案。Google 的配額依專案計算，還可能受 token 與每日額度限制，因此節流不保證能解決所有 429。[Google 額度說明](https://ai.google.dev/gemini-api/docs/rate-limits)。每日額度用完時需等額度重設，程式不會自動升級付費方案。
+
+重試只包住 provider 呼叫，保留同一份對話，不重跑已執行的 repository tools。CLI 會顯示等待秒數；評測的 `provider_calls` 是 Agent 模型回合呼叫數，`transport_requests` 是含重試的 provider 呼叫次數，另有 `rate_limit_retries` 與 `request_wait_seconds`。這些紀錄不是 token 或費用統計。
+
 ## 連線問題排查
 
 若第一次模型請求便失敗，報告與 CLI 會另列 `provider_error.kind` 與 HTTP 狀態，不再只有 `ProviderError`。先只測一個案例：
@@ -194,7 +208,7 @@ python3 -m vancecode.evaluation --live --case shipping_discount --output reports
 
 基本測試涵蓋：故障重現與二次修復、工具參數錯誤、拒絕修改、路徑越界、秘密檔案、測試唯讀、過期 patch、測試 timeout、空測試、環境變數隔離、假完成、迴圈上限，以及 mock HTTP 格式。故障範例不加入專案自身的測試探索；demo 每次複製後修復，保留原始故障。
 
-Context 測試另涵蓋原始任務保留、完整工具群組、未配對結果拒絕、中文 JSON 字元數、節錄標記、完整歷史不被修改、行號讀檔，以及 9,000 字元預算下的修復整合。Evaluation 測試涵蓋多案例重複、baseline 驗證、獨立驗收拒絕假成功、測試檔竄改、provider 錯誤繼續其他案例、報告原子寫入與參數檢查；另有 stale bytecode 回歸測試。新增測試驗證 holdout 不出現在 Agent repo 與對話、針對可見測試寫死答案的修復會被拒絕，以及沒有 holdout 時不宣稱通過。另有八個 provider 診斷與資訊遮蔽測試，目前共 48 個測試。
+Context 測試另涵蓋原始任務保留、完整工具群組、未配對結果拒絕、中文 JSON 字元數、節錄標記、完整歷史不被修改、行號讀檔，以及 9,000 字元預算下的修復整合。Evaluation 測試涵蓋多案例重複、baseline 驗證、獨立驗收拒絕假成功、測試檔竄改、provider 錯誤繼續其他案例、報告原子寫入與參數檢查；另有 stale bytecode 回歸測試。新增測試驗證 holdout 不出現在 Agent repo 與對話、針對可見測試寫死答案的修復會被拒絕，以及沒有 holdout 時不宣稱通過。另有八個 provider 診斷與資訊遮蔽測試，另有請求節流與限次重試測試，目前共 57 個測試。
 
 真實 API 呼叫與模型自主選工具的修復能力，必須設定自己的 key/model 後執行上面的命令驗收；離線測試不能替代這項驗證。
 
