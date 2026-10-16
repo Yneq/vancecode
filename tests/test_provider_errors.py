@@ -69,3 +69,26 @@ class ProviderDiagnosticTests(unittest.TestCase):
             code = main(["--output", str(Path(directory) / "report.json")])
         self.assertEqual(code, 1)
         self.assertIn("shipping_discount: tls_certificate_error", stdout.getvalue())
+
+    def test_google_http_error_extracts_codes_without_exposing_message(self):
+        provider = OpenAICompatibleProvider("secret-key", "test-model")
+        payload = {"error": {"status": "INVALID_ARGUMENT", "message": "API key not valid: secret-key",
+                             "details": [{"reason": "API_KEY_INVALID", "metadata": {"secret": "private"}}]}}
+        error = HTTPError("https://private", 400, "hidden", {}, BytesIO(json.dumps(payload).encode()))
+        with patch("vancecode.provider.urlopen", side_effect=error):
+            with self.assertRaises(ProviderError) as caught:
+                provider.complete([], [])
+        diagnostic = caught.exception.diagnostic()
+        self.assertEqual(diagnostic["provider_reason"], "API_KEY_INVALID")
+        self.assertEqual(diagnostic["request_issue"], "invalid_api_key")
+        self.assertNotIn("secret", json.dumps(diagnostic))
+        self.assertNotIn("private", json.dumps(diagnostic))
+
+    def test_google_schema_errors_and_unknown_codes_are_filtered(self):
+        from vancecode.provider import http_diagnostic
+        for message, issue in (("parameters.properties: should be non-empty for OBJECT type", "empty_object_schema"),
+                               ('Unknown name "additionalProperties"', "unsupported_schema_field")):
+            result = http_diagnostic(json.dumps([{"error": {"message": message}}]).encode())
+            self.assertEqual(result, {"request_issue": issue})
+        self.assertEqual(http_diagnostic(b'{"error":{"status":"secret","details":[{"reason":"secret"}]}}'), {})
+        self.assertEqual(http_diagnostic(b'not json'), {})

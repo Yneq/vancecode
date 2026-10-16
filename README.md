@@ -188,13 +188,13 @@ python3 -m vancecode.evaluation --live --case shipping_discount --output reports
 | `http_error` + 5xx、`timeout` | 服務狀態或逾時 |
 | `invalid_response` / `incomplete_response` | 回應格式或模型提前中止 |
 
-這些是排查方向，不能單憑 HTTP 狀態確定根因。診斷只保存固定分類與數字狀態碼，不記錄原始 provider 回應、例外文字或金鑰。[Google 故障排查](https://ai.google.dev/gemini-api/docs/troubleshooting)。
+這些是排查方向，不能單憑 HTTP 狀態確定根因。Google 錯誤另擷取白名單中的 `provider_status`、`provider_reason` 與固定的 `request_issue` 分類，例如 `API_KEY_INVALID` 或 `empty_object_schema`。最多讀取 16 KB 錯誤內容，原始訊息與 metadata 都不寫入報告。診斷只保存固定分類與數字狀態碼，不記錄原始 provider 回應、例外文字或金鑰。[Google 故障排查](https://ai.google.dev/gemini-api/docs/troubleshooting)。
 
 ## 驗證與下一階段
 
 基本測試涵蓋：故障重現與二次修復、工具參數錯誤、拒絕修改、路徑越界、秘密檔案、測試唯讀、過期 patch、測試 timeout、空測試、環境變數隔離、假完成、迴圈上限，以及 mock HTTP 格式。故障範例不加入專案自身的測試探索；demo 每次複製後修復，保留原始故障。
 
-Context 測試另涵蓋原始任務保留、完整工具群組、未配對結果拒絕、中文 JSON 字元數、節錄標記、完整歷史不被修改、行號讀檔，以及 9,000 字元預算下的修復整合。Evaluation 測試涵蓋多案例重複、baseline 驗證、獨立驗收拒絕假成功、測試檔竄改、provider 錯誤繼續其他案例、報告原子寫入與參數檢查；另有 stale bytecode 回歸測試。新增測試驗證 holdout 不出現在 Agent repo 與對話、針對可見測試寫死答案的修復會被拒絕，以及沒有 holdout 時不宣稱通過。另有五個 provider 診斷與資訊遮蔽測試，目前共 45 個測試。
+Context 測試另涵蓋原始任務保留、完整工具群組、未配對結果拒絕、中文 JSON 字元數、節錄標記、完整歷史不被修改、行號讀檔，以及 9,000 字元預算下的修復整合。Evaluation 測試涵蓋多案例重複、baseline 驗證、獨立驗收拒絕假成功、測試檔竄改、provider 錯誤繼續其他案例、報告原子寫入與參數檢查；另有 stale bytecode 回歸測試。新增測試驗證 holdout 不出現在 Agent repo 與對話、針對可見測試寫死答案的修復會被拒絕，以及沒有 holdout 時不宣稱通過。另有七個 provider 診斷與資訊遮蔽測試，目前共 47 個測試。
 
 真實 API 呼叫與模型自主選工具的修復能力，必須設定自己的 key/model 後執行上面的命令驗收；離線測試不能替代這項驗證。
 

@@ -7,19 +7,60 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
+STATUSES = {"INVALID_ARGUMENT", "UNAUTHENTICATED", "PERMISSION_DENIED", "NOT_FOUND",
+            "RESOURCE_EXHAUSTED", "FAILED_PRECONDITION", "INTERNAL", "UNAVAILABLE"}
+REASONS = {"API_KEY_INVALID", "API_KEY_EXPIRED", "API_KEY_BLOCKED", "API_KEY_SERVICE_BLOCKED",
+           "API_KEY_HTTP_REFERRER_BLOCKED", "API_KEY_IP_ADDRESS_BLOCKED", "SERVICE_DISABLED",
+           "BILLING_DISABLED", "CONSUMER_INVALID", "ACCESS_TOKEN_EXPIRED", "RATE_LIMIT_EXCEEDED"}
+ISSUES = {"unsupported_schema_field", "empty_object_schema", "invalid_api_key", "blocked_api_key"}
+
+
+def http_diagnostic(body: bytes) -> dict:
+    """Extract allowlisted codes only; never return provider message text."""
+    try:
+        data = json.loads(body)
+        if isinstance(data, list):
+            data = data[0]
+        error = data.get("error", {})
+        if not isinstance(error, dict):
+            return {}
+        result = {}
+        if error.get("status") in STATUSES:
+            result["provider_status"] = error["status"]
+        for detail in error.get("details", []) or []:
+            if isinstance(detail, dict) and detail.get("reason") in REASONS:
+                result["provider_reason"] = detail["reason"]
+                break
+        message = str(error.get("message", "")).lower()
+        if "api key not valid" in message or "api key expired" in message:
+            result["request_issue"] = "invalid_api_key"
+        elif "key" in message and "leaked" in message:
+            result["request_issue"] = "blocked_api_key"
+        elif "should be non-empty" in message and "properties" in message:
+            result["request_issue"] = "empty_object_schema"
+        elif "unknown name" in message and any(s in message for s in ("additionalproperties", "additional_properties", "minimum")):
+            result["request_issue"] = "unsupported_schema_field"
+        return result
+    except (ValueError, TypeError, AttributeError, IndexError):
+        return {}
+
 
 class ProviderError(RuntimeError):
-    def __init__(self, message: str, *, kind: str = "provider_error", http_status: int | None = None):
+    def __init__(self, message: str, *, kind: str = "provider_error", http_status: int | None = None,
+                 provider_status=None, provider_reason=None, request_issue=None):
         super().__init__(message)
         allowed = {"provider_error", "http_error", "dns_error", "tls_certificate_error",
                    "tls_error", "timeout", "connection_error", "invalid_response", "incomplete_response"}
         self.kind = kind if kind in allowed else "provider_error"
         self.http_status = http_status if type(http_status) is int and 100 <= http_status <= 599 else None
+        self.details = {k: v for k, v, allowed_values in (
+            ("provider_status", provider_status, STATUSES), ("provider_reason", provider_reason, REASONS),
+            ("request_issue", request_issue, ISSUES)) if isinstance(v, str) and v in allowed_values}
 
     def diagnostic(self) -> dict:
         # Only locally generated enums and numeric status codes, never an
         # exception string, request URL, provider body or credential.
-        return {"kind": self.kind, "http_status": self.http_status}
+        return {"kind": self.kind, "http_status": self.http_status, **self.details}
 
 
 class Provider(Protocol):
@@ -54,9 +95,14 @@ class OpenAICompatibleProvider:
             return {k: message[k] for k in ("role", "content", "tool_calls") if k in message}
         except HTTPError as exc:
             status = exc.code
-            exc.close()
+            try:
+                details = http_diagnostic(exc.read(16_384))
+            except OSError:
+                details = {}
+            finally:
+                exc.close()
             raise ProviderError(f"Provider HTTP {status}; check endpoint, model and credentials",
-                                kind="http_error", http_status=status) from None
+                                kind="http_error", http_status=status, **details) from None
         except (URLError, TimeoutError, OSError) as exc:
             reason = exc.reason if isinstance(exc, URLError) else exc
             if isinstance(reason, socket.gaierror):

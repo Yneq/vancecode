@@ -221,7 +221,9 @@ def main(argv=None):
             diagnostic = row.get("provider_error")
             if diagnostic:
                 print(f"  {row['case']}: {diagnostic['kind']}" +
-                      (f" (HTTP {diagnostic['http_status']})" if diagnostic["http_status"] else ""))
+                      (f" (HTTP {diagnostic['http_status']})" if diagnostic["http_status"] else "") +
+                      "".join(f" / {diagnostic[key]}" for key in (
+                          "provider_status", "provider_reason", "request_issue") if key in diagnostic))
         return 0 if not summary["failed"] else 1
     except (ValueError, OSError) as exc:
         print(f"Evaluation error: {exc}")
