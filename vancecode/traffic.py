@@ -16,6 +16,8 @@ class RequestSchedule:
         self.next_at = 0
         self.requests = self.retry_count = 0
         self.wait_seconds = 0.0
+        self.blocked_until = 0
+        self.blocked_error = None
 
     def wait(self):
         remaining = max(0, self.next_at - self.clock())
@@ -33,6 +35,8 @@ class PacedProvider:
 
     def complete(self, messages, tools):
         schedule = self.schedule
+        if schedule.blocked_error and schedule.clock() < schedule.blocked_until:
+            raise schedule.blocked_error
         for attempt in range(schedule.retries + 1):
             schedule.wait()
             schedule.requests += 1
@@ -42,9 +46,13 @@ class PacedProvider:
             except ProviderError as exc:
                 if exc.http_status != 429:
                     raise
+                required = exc.details.get("retry_after_seconds")
+                if required is not None and required > 60:
+                    schedule.blocked_until = schedule.clock() + required
+                    schedule.blocked_error = ProviderError("Provider quota cooldown", **exc.diagnostic())
+                    raise
                 if schedule.retries == 0:
                     raise
-                required = exc.details.get("retry_after_seconds")
                 delay = max(required or 0, 2 ** (attempt + 1)) + 1 + schedule.jitter()
                 # Never shorten long server cooldowns into an early retry.
                 # Leave daily quota/long cooldown failures for a later run.

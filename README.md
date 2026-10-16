@@ -177,7 +177,7 @@ JSON 報告包含 mode、model、UTC 時間、執行設定、成功率、每案�
 python3 -m vancecode.evaluation --live --case normalize_slug --case mean_precision --request-interval 15 --rate-limit-retries 2 --output reports/live-remaining-paced.json
 ```
 
-一般 CLI 也支援相同兩個參數。預設兩者均為 0，不增加等待或自動重試。interval 上限 60 秒、重試上限 5 次；只重試 HTTP 429，其他錯誤直接回報。重試採指數退避加少量 jitter，並遵守數字型 Retry-After header、Google RetryInfo 或錯誤訊息的等待秒數。單次要求等待超過 60 秒時回報錯誤，不縮短伺服器要求的冷卻時間。等待可用 Ctrl-C 中斷。
+一般 CLI 也支援相同兩個參數。預設兩者均為 0，不增加等待或自動重試。interval 上限 60 秒、重試上限 5 次；只重試 HTTP 429，其他錯誤直接回報。重試採指數退避加少量 jitter，並遵守數字型 Retry-After header、Google RetryInfo 或錯誤訊息的等待秒數。單次要求等待超過 60 秒時回報 quota_cooldown，停止該程序後續案例，不縮短伺服器要求的冷卻時間。Google 文字等待時間可解析小時、分鐘與秒，例如 11h2m54s。尚未發送的案例標記 skipped_due_to_quota 並保留 transport_requests=0；此停止狀態不跨程序保存，因此冷卻結束前不要另啟新程序重跑。等待可用 Ctrl-C 中斷。
 
 同一評測程序中的案例共用請求排程；不協調其他程序或股票專案。Google 的配額依專案計算，還可能受 token 與每日額度限制，因此節流不保證能解決所有 429。[Google 額度說明](https://ai.google.dev/gemini-api/docs/rate-limits)。每日額度用完時需等額度重設，程式不會自動升級付費方案。
 
@@ -208,7 +208,7 @@ python3 -m vancecode.evaluation --live --case shipping_discount --output reports
 
 基本測試涵蓋：故障重現與二次修復、工具參數錯誤、拒絕修改、路徑越界、秘密檔案、測試唯讀、過期 patch、測試 timeout、空測試、環境變數隔離、假完成、迴圈上限，以及 mock HTTP 格式。故障範例不加入專案自身的測試探索；demo 每次複製後修復，保留原始故障。
 
-Context 測試另涵蓋原始任務保留、完整工具群組、未配對結果拒絕、中文 JSON 字元數、節錄標記、完整歷史不被修改、行號讀檔，以及 9,000 字元預算下的修復整合。Evaluation 測試涵蓋多案例重複、baseline 驗證、獨立驗收拒絕假成功、測試檔竄改、provider 錯誤繼續其他案例、報告原子寫入與參數檢查；另有 stale bytecode 回歸測試。新增測試驗證 holdout 不出現在 Agent repo 與對話、針對可見測試寫死答案的修復會被拒絕，以及沒有 holdout 時不宣稱通過。另有八個 provider 診斷與資訊遮蔽測試，另有請求節流與限次重試測試，目前共 57 個測試。
+Context 測試另涵蓋原始任務保留、完整工具群組、未配對結果拒絕、中文 JSON 字元數、節錄標記、完整歷史不被修改、行號讀檔，以及 9,000 字元預算下的修復整合。Evaluation 測試涵蓋多案例重複、baseline 驗證、獨立驗收拒絕假成功、測試檔竄改、provider 錯誤繼續其他案例、報告原子寫入與參數檢查；另有 stale bytecode 回歸測試。新增測試驗證 holdout 不出現在 Agent repo 與對話、針對可見測試寫死答案的修復會被拒絕，以及沒有 holdout 時不宣稱通過。另有九個 provider 診斷與資訊遮蔽測試，另有請求節流與限次重試測試，目前共 59 個測試。
 
 真實 API 呼叫與模型自主選工具的修復能力，必須設定自己的 key/model 後執行上面的命令驗收；離線測試不能替代這項驗證。
 

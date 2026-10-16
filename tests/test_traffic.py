@@ -77,6 +77,20 @@ class TrafficTests(unittest.TestCase):
             PacedProvider(provider, schedule).complete([], [])
         self.assertEqual(provider.calls, 1)
         self.assertEqual(self.clock.now, 0)
+        next_provider = Stub([{}])
+        with self.assertRaises(ProviderError):
+            PacedProvider(next_provider, schedule).complete([], [])
+        self.assertEqual(next_provider.calls, 0)
+
+    def test_long_quota_blocks_remaining_evaluation_cases(self):
+        schedule = self.schedule(15, 2)
+        provider = Stub([ProviderError("daily quota", http_status=429, retry_after_seconds=39774)])
+        with patch("vancecode.evaluation.RequestSchedule", return_value=schedule):
+            report = evaluate(lambda _: provider, mode="live", cases=BENCHMARKS[:2])
+        self.assertEqual(provider.calls, 1)
+        self.assertEqual(report["runs"][0]["reason"], "quota_cooldown")
+        self.assertTrue(report["runs"][1]["skipped_due_to_quota"])
+        self.assertEqual(report["runs"][1]["transport_requests"], 0)
 
     def test_defaults_do_not_add_retry_or_cross_case_cooldown(self):
         schedule = self.schedule()

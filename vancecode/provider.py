@@ -17,6 +17,13 @@ REASONS = {"API_KEY_INVALID", "API_KEY_EXPIRED", "API_KEY_BLOCKED", "API_KEY_SER
 ISSUES = {"unsupported_schema_field", "empty_object_schema", "invalid_api_key", "blocked_api_key"}
 
 
+def duration_seconds(value: str) -> float | None:
+    match = re.fullmatch(r"(?:(\d+(?:\.\d+)?)h)?(?:(\d+(?:\.\d+)?)m)?(?:(\d+(?:\.\d+)?)s)?", value)
+    if not match or not any(match.groups()):
+        return None
+    return sum(float(part or 0) * scale for part, scale in zip(match.groups(), (3600, 60, 1)))
+
+
 def safe_provider_message(message: str, api_key: str = "") -> str:
     """Keep a bounded error explanation, excluding credentials and URLs."""
     if api_key:
@@ -43,18 +50,20 @@ def http_diagnostic(body: bytes, api_key: str = "") -> dict:
             result["provider_status"] = error["status"]
         for detail in error.get("details", []) or []:
             if isinstance(detail, dict) and isinstance(detail.get("retryDelay"), str):
-                match = re.fullmatch(r"(\d+(?:\.\d+)?)s", detail["retryDelay"])
-                if match:
-                    result["retry_after_seconds"] = float(match[1])
+                seconds = duration_seconds(detail["retryDelay"])
+                if seconds is not None:
+                    result["retry_after_seconds"] = seconds
             if isinstance(detail, dict) and detail.get("reason") in REASONS:
                 result["provider_reason"] = detail["reason"]
         raw_message = error.get("message", "")
         if isinstance(raw_message, str) and raw_message:
             result["provider_message"] = safe_provider_message(raw_message, api_key)
         message = str(raw_message).lower()
-        retry = re.search(r"retry in (\d+(?:\.\d+)?)s", message)
+        retry = re.search(r"retry in ([\dhms.]+)", message)
         if retry:
-            result["retry_after_seconds"] = max(result.get("retry_after_seconds", 0), float(retry[1]))
+            seconds = duration_seconds(retry[1].rstrip("."))
+            if seconds is not None:
+                result["retry_after_seconds"] = max(result.get("retry_after_seconds", 0), seconds)
         if "api key not valid" in message or "api key expired" in message:
             result["request_issue"] = "invalid_api_key"
         elif "key" in message and "leaked" in message:

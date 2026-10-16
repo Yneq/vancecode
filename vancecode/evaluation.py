@@ -86,6 +86,12 @@ def evaluate(provider_factory, *, mode: str, cases=BENCHMARKS, repeats: int = 1,
                    "candidate_patch": None,
                    "changed_files": [], "input_tokens": None, "output_tokens": None,
                    "cost_usd": None}
+            if schedule.blocked_error and schedule.clock() < schedule.blocked_until:
+                row.update(reason="quota_cooldown", skipped_due_to_quota=True, agent_steps=None,
+                           provider_error=schedule.blocked_error.diagnostic(), transport_requests=0,
+                           rate_limit_retries=0, request_wait_seconds=0, elapsed_seconds=0)
+                rows.append(row)
+                continue
 
             def emit(event):
                 if event.get("type") == "context":
@@ -150,6 +156,8 @@ def evaluate(provider_factory, *, mode: str, cases=BENCHMARKS, repeats: int = 1,
                 row["error_type"] = type(exc).__name__
                 if isinstance(exc, ProviderError):
                     row["provider_error"] = exc.diagnostic()
+                    if exc.http_status == 429:
+                        row["reason"] = "quota_cooldown" if exc.details.get("retry_after_seconds", 0) > 60 else "rate_limited"
                 row["agent_steps"] = None
             row["elapsed_seconds"] = round(time.monotonic() - started, 4)
             row["transport_requests"] = schedule.requests - transport_before[0]

@@ -26,6 +26,11 @@ class ProviderDiagnosticTests(unittest.TestCase):
                 OpenAICompatibleProvider("key", "model").complete([], [])
         self.assertEqual(caught.exception.diagnostic()["retry_after_seconds"], 50)
 
+    def test_long_duration_text_is_parsed_without_structured_hint(self):
+        from vancecode.provider import http_diagnostic
+        payload = {"error": {"message": "Please retry in 11h2m54.672941892s."}}
+        self.assertAlmostEqual(http_diagnostic(json.dumps(payload).encode())["retry_after_seconds"], 39774.672941892)
+
     def test_network_errors_are_classified_without_leaking_details(self):
         cases = [(URLError(socket.gaierror(-2, "secret-url")), "dns_error"),
                  (URLError(ssl.SSLCertVerificationError(1, "secret-cert")), "tls_certificate_error"),
