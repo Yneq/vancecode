@@ -1,5 +1,7 @@
 """The loop depends on a Protocol, not an API client."""
 import json
+import socket
+import ssl
 from typing import Protocol
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
@@ -7,7 +9,17 @@ from urllib.request import Request, urlopen
 
 
 class ProviderError(RuntimeError):
-    pass
+    def __init__(self, message: str, *, kind: str = "provider_error", http_status: int | None = None):
+        super().__init__(message)
+        allowed = {"provider_error", "http_error", "dns_error", "tls_certificate_error",
+                   "tls_error", "timeout", "connection_error", "invalid_response", "incomplete_response"}
+        self.kind = kind if kind in allowed else "provider_error"
+        self.http_status = http_status if type(http_status) is int and 100 <= http_status <= 599 else None
+
+    def diagnostic(self) -> dict:
+        # Only locally generated enums and numeric status codes, never an
+        # exception string, request URL, provider body or credential.
+        return {"kind": self.kind, "http_status": self.http_status}
 
 
 class Provider(Protocol):
@@ -35,14 +47,28 @@ class OpenAICompatibleProvider:
                 payload = json.load(response)
             choice = payload["choices"][0]
             if choice.get("finish_reason") not in ("stop", "tool_calls"):
-                raise ProviderError("Model response incomplete: " + str(choice.get("finish_reason")))
+                raise ProviderError("Model response incomplete", kind="incomplete_response")
             message = choice["message"]
             if message.get("role") != "assistant":
                 raise ValueError("Expected assistant message")
             return {k: message[k] for k in ("role", "content", "tool_calls") if k in message}
         except HTTPError as exc:
-            raise ProviderError(f"Provider HTTP {exc.code}; check endpoint, model and credentials") from None
+            status = exc.code
+            exc.close()
+            raise ProviderError(f"Provider HTTP {status}; check endpoint, model and credentials",
+                                kind="http_error", http_status=status) from None
         except (URLError, TimeoutError, OSError) as exc:
-            raise ProviderError(f"Provider connection failed ({type(exc).__name__})") from None
+            reason = exc.reason if isinstance(exc, URLError) else exc
+            if isinstance(reason, socket.gaierror):
+                kind = "dns_error"
+            elif isinstance(reason, ssl.SSLCertVerificationError):
+                kind = "tls_certificate_error"
+            elif isinstance(reason, ssl.SSLError):
+                kind = "tls_error"
+            elif isinstance(reason, TimeoutError):
+                kind = "timeout"
+            else:
+                kind = "connection_error"
+            raise ProviderError(f"Provider connection failed: {kind}", kind=kind) from None
         except (KeyError, IndexError, TypeError, ValueError) as exc:
-            raise ProviderError("Invalid provider response") from exc
+            raise ProviderError("Invalid provider response", kind="invalid_response") from None

@@ -169,11 +169,32 @@ JSON 報告包含 mode、model、UTC 時間、執行設定、成功率、每案�
 
 目前未收集 API usage，也沒有價格表：token 數與 `cost_usd` 一律為 `null`，不能解讀為零成本。模型自主修復成功率需使用 `--live` 實際執行後才能評估。JSON 先寫暫存檔再原子替換；指定已存在的報告路徑會覆寫舊報告。Exit codes：0 = 全部成功、1 = 至少一個案例失敗、2 = CLI 設定或報告寫入錯誤、130 = 中斷。
 
+## 連線問題排查
+
+若第一次模型請求便失敗，報告與 CLI 會另列 `provider_error.kind` 與 HTTP 狀態，不再只有 `ProviderError`。先只測一個案例：
+
+```sh
+python3 -m vancecode.evaluation --live --case shipping_discount --output reports/live-diagnostic.json
+```
+
+| 診斷 | 接下來檢查 |
+|---|---|
+| `dns_error` | 執行環境的 DNS 與網路權限 |
+| `tls_certificate_error` | Python 的受信任 CA 憑證；不要關閉 TLS 驗證 |
+| `http_error` + 400 | 請求參數或模型/工具介面相容性 |
+| `http_error` + 401 / 403 | API key 與服務/地區權限 |
+| `http_error` + 404 | 模型名稱與 endpoint |
+| `http_error` + 429 | 額度或速率限制 |
+| `http_error` + 5xx、`timeout` | 服務狀態或逾時 |
+| `invalid_response` / `incomplete_response` | 回應格式或模型提前中止 |
+
+這些是排查方向，不能單憑 HTTP 狀態確定根因。診斷只保存固定分類與數字狀態碼，不記錄原始 provider 回應、例外文字或金鑰。[Google 故障排查](https://ai.google.dev/gemini-api/docs/troubleshooting)。
+
 ## 驗證與下一階段
 
 基本測試涵蓋：故障重現與二次修復、工具參數錯誤、拒絕修改、路徑越界、秘密檔案、測試唯讀、過期 patch、測試 timeout、空測試、環境變數隔離、假完成、迴圈上限，以及 mock HTTP 格式。故障範例不加入專案自身的測試探索；demo 每次複製後修復，保留原始故障。
 
-Context 測試另涵蓋原始任務保留、完整工具群組、未配對結果拒絕、中文 JSON 字元數、節錄標記、完整歷史不被修改、行號讀檔，以及 9,000 字元預算下的修復整合。Evaluation 測試涵蓋多案例重複、baseline 驗證、獨立驗收拒絕假成功、測試檔竄改、provider 錯誤繼續其他案例、報告原子寫入與參數檢查；另有 stale bytecode 回歸測試。新增測試驗證 holdout 不出現在 Agent repo 與對話、針對可見測試寫死答案的修復會被拒絕，以及沒有 holdout 時不宣稱通過。目前共 40 個測試。
+Context 測試另涵蓋原始任務保留、完整工具群組、未配對結果拒絕、中文 JSON 字元數、節錄標記、完整歷史不被修改、行號讀檔，以及 9,000 字元預算下的修復整合。Evaluation 測試涵蓋多案例重複、baseline 驗證、獨立驗收拒絕假成功、測試檔竄改、provider 錯誤繼續其他案例、報告原子寫入與參數檢查；另有 stale bytecode 回歸測試。新增測試驗證 holdout 不出現在 Agent repo 與對話、針對可見測試寫死答案的修復會被拒絕，以及沒有 holdout 時不宣稱通過。另有五個 provider 診斷與資訊遮蔽測試，目前共 45 個測試。
 
 真實 API 呼叫與模型自主選工具的修復能力，必須設定自己的 key/model 後執行上面的命令驗收；離線測試不能替代這項驗證。
 

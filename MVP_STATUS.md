@@ -14,10 +14,10 @@
 
 | 項目 | 狀態 | 證據 |
 |---|---|---|
-| 自動測試 | 新增差異紀錄後重新執行，40 個測試全部通過 | `python3 -m unittest discover -s tests -v` |
+| 自動測試 | 45 個測試全部通過，含新增 provider 診斷測試 | `python3 -m unittest discover -s tests -v` |
 | 離線評測 | 更新報告後 6/6 通過，可見與 holdout 均為 6/6 | `reports/offline.json`，mode 為 offline-scripted，包含 candidate_patch |
 | Gemini 設定 | 已沿用既有股票研究專案的本機 key 與 gemini-3.6-flash；key 僅存於被忽略的 .env | 使用 Google OpenAI-compatible endpoint，未更動舊專案 |
-| 真實模型三案例 | 第一案例預檢因工作階段 DNS 失敗而中止，模型修復能力尚未驗收 | `reports/live-preflight.json` 為連線錯誤紀錄，不是模型能力分數 |
+| 真實模型三案例 | 外部終端機執行 0/3，均在第一次模型請求發生 ProviderError，沒有工具呼叫或修改 | `reports/live.json`；舊版報告沒有根因分類，需以新版單案例診斷確認，不推定為模型能力失敗 |
 | 真實模型 patch 人工檢查 | 待 live 報告 | 檢查每案例 candidate_patch，確認符合規格、未硬編碼測試答案 |
 | GitHub 最終同步 | 依使用者安排，留待明天一併 push | 比較本機 HEAD 與遠端 main |
 

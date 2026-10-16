@@ -11,7 +11,7 @@ import time
 from .agent import Agent
 from .benchmarks import BENCHMARKS, Benchmark
 from .context import ContextManager
-from .provider import OpenAICompatibleProvider
+from .provider import OpenAICompatibleProvider, ProviderError
 from .safety import Safety
 from .tools import Tools
 
@@ -144,6 +144,8 @@ def evaluate(provider_factory, *, mode: str, cases=BENCHMARKS, repeats: int = 1,
                 # Do not persist provider bodies, credentials or arbitrary repo text.
                 row["reason"] = "execution_error"
                 row["error_type"] = type(exc).__name__
+                if isinstance(exc, ProviderError):
+                    row["provider_error"] = exc.diagnostic()
                 row["agent_steps"] = None
             row["elapsed_seconds"] = round(time.monotonic() - started, 4)
             rows.append(row)
@@ -215,6 +217,11 @@ def main(argv=None):
         write_report(report, args.output)
         summary = report["summary"]
         print(f"{report['mode']}: {summary['passed']}/{summary['runs']} verified passes; report: {args.output}")
+        for row in report["runs"]:
+            diagnostic = row.get("provider_error")
+            if diagnostic:
+                print(f"  {row['case']}: {diagnostic['kind']}" +
+                      (f" (HTTP {diagnostic['http_status']})" if diagnostic["http_status"] else ""))
         return 0 if not summary["failed"] else 1
     except (ValueError, OSError) as exc:
         print(f"Evaluation error: {exc}")
