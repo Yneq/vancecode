@@ -17,7 +17,7 @@
 | 自動測試 | 59 個測試全部通過，含錯誤遮蔽、節流、重試次數限制與跨案例排程 | `python3 -m unittest discover -s tests -v` |
 | 離線評測 | 更新報告後 6/6 通過，可見與 holdout 均為 6/6 | `reports/offline.json`，mode 為 offline-scripted，包含 candidate_patch |
 | Gemini 設定 | 使用者已換入有效 Gemini key，模型為 gemini-3.6-flash；key 僅存於被忽略的 .env | shipping_discount 已成功呼叫 API 並完成修復；未更動舊專案 |
-| 真實模型三案例 | shipping_discount 已驗收通過；另兩例即使節流仍遇長時間免費配額冷卻（limit 20，約 11 小時），待額度恢復後重新驗收 | `reports/live-diagnostic.json`：live，8 回合、7 次工具呼叫、約 31.3 秒，可見與 holdout 均通過；`reports/live-remaining.json` 與 `reports/live-remaining-paced.json` 保留 429 紀錄；舊 `reports/live.json` 為無效 key 時的失敗紀錄 |
+| 真實模型三案例 | shipping_discount 已驗收通過；另兩例即使節流仍遇長時間免費配額冷卻（limit 20，最新 10/17 回應要求約 20 小時冷卻），待該模型額度恢復後重新驗收 | `reports/live-diagnostic.json`：live，8 回合、7 次工具呼叫、約 31.3 秒，可見與 holdout 均通過；`reports/live-remaining.json`、`reports/live-remaining-paced.json` 與 `reports/live-remaining-final.json` 保留 429 紀錄；最新報告確認第二例 skipped_due_to_quota=true、transport_requests=0；舊 `reports/live.json` 為無效 key 時的失敗紀錄 |
 | 真實模型 patch 人工檢查 | pricing 已檢查，另兩例待執行 | Gemini 僅修改 pricing.py 的折扣公式：先對商品小計折扣取整，再加運費；沒有改測試或寫死答案 |
 | GitHub 最終同步 | 依使用者安排，留待明天一併 push | 比較本機 HEAD 與遠端 main |
 
