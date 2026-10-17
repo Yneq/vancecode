@@ -1,6 +1,6 @@
 # VanceCode — Mini Coding Agent Harness
 
-**狀態：MVP 0.1.0，真實模型三案例驗收進行中。** 這是學習與展示 coding agent harness 的小型實作。Gemini 已完成 shipping_discount 的自主修復，可見與 holdout 測試均通過；其餘兩個案例待驗收，尚不宣稱整組成功率。驗收紀錄與收尾條件見 [MVP_STATUS.md](MVP_STATUS.md)。
+**狀態：MVP 0.1.0，三個內建案例的真實模型驗收與程式差異檢查已完成。** Gemini 3.6 Flash 分兩次執行完成 pricing、slug 與 mean 的修復，各案例的可見與 holdout 測試均通過。先前連線、無效 key 與配額失敗紀錄仍保留，這不是一次執行的 100% 成功率，也不代表大型專案能力。驗收證據與已知限制見 [MVP_STATUS.md](MVP_STATUS.md)。
 
 從零實作的 Python CLI coding agent。已完成 Milestone 1、Milestone 2 的 Context Manager 第一版，以及 Milestone 3 的 Evaluation Harness 第一版；無第三方 runtime dependencies，Python 3.11+（目前在 Python 3.14 驗證）。
 

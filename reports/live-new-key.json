@@ -1,0 +1,95 @@
+{
+  "schema_version": 2,
+  "benchmark_version": "2",
+  "mode": "live",
+  "model": "gemini-3.6-flash",
+  "created_at": "2026-10-17T04:20:43.965369+00:00",
+  "limitations": [
+    "Scripted runs measure harness mechanics, not model capability.",
+    "Visible and held-out fixture tests are limited regression checks, not proof of correctness.",
+    "Held-out tests are withheld from tool-visible repos, not secured against hostile local code.",
+    "Token usage and cost are unavailable and reported as null.",
+    "Repository tests execute locally without an OS sandbox."
+  ],
+  "config": {
+    "repeats": 1,
+    "max_steps": 20,
+    "context_chars": 200000,
+    "test_timeout": 30,
+    "request_interval": 15.0,
+    "rate_limit_retries": 2
+  },
+  "summary": {
+    "runs": 2,
+    "passed": 2,
+    "failed": 0,
+    "success_rate": 1.0,
+    "visible_passed": 2,
+    "holdout_passed": 2,
+    "holdout_failed": 0,
+    "holdout_skipped": 0,
+    "mean_agent_steps": 9.0,
+    "runs_with_step_count": 2,
+    "elapsed_seconds": 259.3493
+  },
+  "runs": [
+    {
+      "case": "normalize_slug",
+      "attempt": 1,
+      "success": true,
+      "reason": "verified_pass",
+      "agent_steps": 9,
+      "provider_calls": 9,
+      "tool_calls": 8,
+      "tool_errors": 0,
+      "agent_test_runs": 3,
+      "context_compactions": 0,
+      "max_request_chars": 18914,
+      "baseline_failed": true,
+      "final_tests_passed": true,
+      "visible_tests_passed": true,
+      "holdout_configured": true,
+      "holdout_tests_passed": true,
+      "candidate_patch": "--- a/slug.py\n+++ b/slug.py\n@@ -1,2 +1,2 @@\n def slugify(text):\n-    return text.lower().replace(' ', '-')\n+    return '-'.join(text.lower().split())\n",
+      "changed_files": [
+        "slug.py"
+      ],
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd": null,
+      "elapsed_seconds": 122.9942,
+      "transport_requests": 9,
+      "rate_limit_retries": 0,
+      "request_wait_seconds": 96.4645
+    },
+    {
+      "case": "mean_precision",
+      "attempt": 1,
+      "success": true,
+      "reason": "verified_pass",
+      "agent_steps": 9,
+      "provider_calls": 9,
+      "tool_calls": 8,
+      "tool_errors": 0,
+      "agent_test_runs": 2,
+      "context_compactions": 0,
+      "max_request_chars": 15840,
+      "baseline_failed": true,
+      "final_tests_passed": true,
+      "visible_tests_passed": true,
+      "holdout_configured": true,
+      "holdout_tests_passed": true,
+      "candidate_patch": "--- a/stats.py\n+++ b/stats.py\n@@ -1,2 +1,5 @@\n def mean(values):\n-    return sum(values) // len(values)\n+    values = list(values)\n+    if not values:\n+        raise ValueError(\"mean requires at least one data point\")\n+    return sum(values) / len(values)\n",
+      "changed_files": [
+        "stats.py"
+      ],
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd": null,
+      "elapsed_seconds": 136.3551,
+      "transport_requests": 9,
+      "rate_limit_retries": 0,
+      "request_wait_seconds": 110.8757
+    }
+  ]
+}
